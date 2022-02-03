@@ -16,14 +16,14 @@ class serverAccess:
         dictinary["fit"] = {"data" : fit.data, "time" : fit.time }
         return json.dumps(dictinary)
 
-    def sendDataToServer(self, data, control, fit):
+    async def sendDataToServer(self, data, control, fit):
         jsonStr = self.convertDatatoJsonString(data, control, fit)
-        self._sendDataToComputer(jsonStr)
+        await self._sendDataToServer(jsonStr)
 
     async def _sendDataToServer(self, jsonData):
         try:
             dataBytes = bytes(jsonData,encoding="utf-8")
-            sock = asyncudp.create_socket(remote_addr=(self.ip, self.port))
+            sock = await asyncudp.create_socket(remote_addr=(self.ip, self.port))
             sock.sendto(dataBytes)
             # print(await sock.recvfrom())
         except Exception as ex:

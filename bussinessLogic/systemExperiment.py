@@ -1,3 +1,4 @@
+import asyncio
 from numpy import sign
 from dataStructures.timeDataTuple import timeDataTuple
 from dataAccess.pwmAccess import *
@@ -27,9 +28,17 @@ class systemExperiment():
         processid = os.getpid()
         os.system("sudo renice -n -19 -p " + str(processid))
     
-    def sendDataToServer(self, data, control, fit):
-        self.serverAccess.sendDataToServer(data, control, fit)
+    def sendDataToServer(self, queue, toTerminate):
+        asyncio.run(self._sendDataToServer(queue, toTerminate))
 
+    def stopSendingToServer(self):
+        asyncio.gather() 
+
+    async def _sendDataToServer(self, queue, toTerminate):
+        while not bool(toTerminate.value):
+            [data, control, fit] = queue.get()
+            await self.serverAccess.sendDataToServer(data, control, fit)
+        
     def readData(self):
         return self.arduinoAccess.readData(0) 
     

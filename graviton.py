@@ -95,11 +95,6 @@ def processData(qPlot, qCollectData, qServerTransfer, toTerminate, pointsToShow)
     finally:
         pass    
 
-def sendToServer(qServerTransfer, toTerminate):
-    while not bool(toTerminate.value):
-        [data, control, fit] = qServerTransfer.get()
-        system.sendDataToServer(data, control, fit)
-
 pointsToShow = 100
 
 # run simulation instead of real data
@@ -115,17 +110,13 @@ toTerminate = mp.Value(ctypes.c_bool, False)
 
 collectDataProcess = threading.Thread(target=collectData, args=(qCollectData, qCollectErrors, toTerminate, ))
 processDataProcess = threading.Thread(target=processData, args=(qPlot, qCollectData, qServerTransfer, toTerminate, pointsToShow, ))
-sendToServerProcess = threading.Thread(target=sendToServer, args=(qServerTransfer, toTerminate, ))
-# sendToPCProcess =  
+sendToServerProcess = threading.Thread(target=system.sendDataToServer, args=(qServerTransfer, toTerminate, ))
 # plotProcess = mp.Process(target=plotData, args=(qPlot,pointsToShow, toTerminate, ))
 
 # ygfh
 collectDataProcess.start()
 processDataProcess.start()
 sendToServerProcess.start()
-# plotProcess.start()
-
-
 
 try:
     # processData(qPlot, qCollectXT, qPCTransfer, toTerminate, pointsToShow)
@@ -139,5 +130,7 @@ finally:
     toTerminate.value = True
     collectDataProcess.join()    
     processDataProcess.join()
+    system.stopSendingToServer()
+    sendToServerProcess.join()
     system.setNewControlValue(0)
     system.closeConnection()
