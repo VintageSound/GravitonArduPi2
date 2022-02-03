@@ -1,18 +1,33 @@
+from utilities.plotter import plotter
+from server.bussinessLogic.serverLogic import proccessNewData, serverLogic
+import numpy as np
 
-from server.dataAccess.clientListener import clientListener
-import asyncio
+server = serverLogic()
+server.startListenToClient()
 
-async def listen():
-    listener = clientListener()
-    await listener.initSocket()
+def plotData(pointsToShow):
+    plot = plotter(pointsToShow)
+    lastRecivedTime = 0
 
-    try:
-        while True:
-            data, control, fit = await listener.waitForDataFromClient()
-            print("data", data.time, data.data)
-            print("control", control.time, control.data)
-            print("fit", fit.time, fit.data)
-    except Exception as ex:
-        print(ex)
+    while plot.isFigureOpen() and not server.toTerminate:
+        try:
+            server.proccessNewData()
+            
+            plot.drawLine('control',server.control.time, server.control.data,'r-', fitBoundriesToX = False, fitBoundriesToY = True)
+            plot.drawLine('x',server.data.time, server.data.data,'b.', fitBoundriesToX = True, fitBoundriesToY = True)
+            plot.drawLine('fit',server.fit.time, server.fit.data,'tab:orange', fitBoundriesToX = False, fitBoundriesToY = False)
+            plot.refresh()
 
-asyncio.run(listen())
+        except Exception as ex:
+            print(ex)
+
+try:
+    # processData(qPlot, qCollectXT, qPCTransfer, toTerminate, pointsToShow)
+    plotData(1000)
+except KeyboardInterrupt:
+    print("exiting")
+except Exception as ex:
+    print(ex)
+    raise ex
+finally:
+    server.stopListenToClient()
