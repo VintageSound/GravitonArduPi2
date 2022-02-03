@@ -9,11 +9,14 @@ class timeDataTuple():
         self.checkIfTupleValid()
 
     def extend(self, timeData):
+        timeData.checkIfTupleValid()
+        self.checkIfTupleValid()
         self.time.extend(timeData.time)
         self.data.extend(timeData.data)
         self.checkIfTupleValid()
 
     def sortByTime(self):
+        self.checkIfTupleValid()
         self.data = [x for t,x in sorted(zip(self.time,self.data))]
         self.time.sort()
         self.checkIfTupleValid()
