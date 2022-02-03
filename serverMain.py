@@ -1,5 +1,5 @@
 from utilities.plotter import plotter
-from server.bussinessLogic.serverLogic import proccessNewData, serverLogic
+from server.bussinessLogic.serverLogic import serverLogic
 import numpy as np
 
 server = serverLogic()
@@ -13,6 +13,9 @@ def plotData(pointsToShow):
         try:
             server.proccessNewData()
             
+            if len(server.data.time) == 0:
+                continue
+
             plot.drawLine('control',server.control.time, server.control.data,'r-', fitBoundriesToX = False, fitBoundriesToY = True)
             plot.drawLine('x',server.data.time, server.data.data,'b.', fitBoundriesToX = True, fitBoundriesToY = True)
             plot.drawLine('fit',server.fit.time, server.fit.data,'tab:orange', fitBoundriesToX = False, fitBoundriesToY = False)
