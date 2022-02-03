@@ -11,6 +11,11 @@ class serverAccess:
 
     def convertDatatoJsonString(self, data, control, fit):
         dictinary = {}
+
+        data.checkIfTupleValid()
+        control.checkIfTupleValid()
+        fit.checkIfTupleValid()
+        
         dictinary["data"] = {"data" : data.data, "time" : data.time }
         dictinary["control"] = {"data" : control.data, "time" : control.time }
         dictinary["fit"] = {"data" : fit.data, "time" : fit.time }

@@ -65,7 +65,8 @@ def processData(qPlot, qCollectData, qServerTransfer, toTerminate, pointsToShow)
                 if newData.time[0] > lastRecivedTime:
                     dataRecived.extend(newData)
                 else:
-                    qServerTransfer.put([newData, timeDataTuple(), timeDataTuple()])
+                    emptyTuple = timeDataTuple([],[])
+                    qServerTransfer.put([newData, emptyTuple, emptyTuple])
 
             if len(dataRecived.data) == 0:
                 continue
