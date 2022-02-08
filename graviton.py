@@ -1,4 +1,5 @@
 
+import time
 from numpy.lib.ufunclike import _fix_out_named_y
 from bussinessLogic.systemExperiment import systemExperiment
 from bussinessLogic.systemSimulation import systemSimulation
@@ -12,18 +13,17 @@ import threading
 
 system = systemExperiment()
 
-def collectData(qCollectData, qCollectErrors, toTerminate):
+def collectData(qCollectData, toTerminate):
     while not bool(toTerminate.value):
         try:
             newData = system.readData()
             
-            if len(newData.data) == 0:
-                qCollectErrors.put(newData)
+            if newData is None or len(newData.data) == 0:
                 continue
    
             qCollectData.put(newData)    
         except Exception as ex:
-            qCollectErrors.put(ex)
+            print("Error while collecting data: ", ex)
 
 def plotData(qPlot, pointsToShow, toTerminate):
     plot = plotter(pointsToShow)
@@ -50,7 +50,7 @@ def processData(qPlot, qCollectData, qServerTransfer, toTerminate, pointsToShow)
 
     data = timeDataTuple([0],[0])
     control = timeDataTuple([0],[0])
-    dataRecived = timeDataTuple()
+    dataRecived = timeDataTuple([],[])
     lastRecivedTime = 0
 
     i = 1
@@ -64,10 +64,7 @@ def processData(qPlot, qCollectData, qServerTransfer, toTerminate, pointsToShow)
                 newData = qCollectData.get()
                 if newData.time[0] > lastRecivedTime:
                     dataRecived.extend(newData)
-                else:
-                    emptyTuple = timeDataTuple([],[])
-                    qServerTransfer.put([newData, emptyTuple, emptyTuple])
-
+                
             if len(dataRecived.data) == 0:
                 continue
 
@@ -81,10 +78,11 @@ def processData(qPlot, qCollectData, qServerTransfer, toTerminate, pointsToShow)
             data.clip(pointsToShow)
             control.clip(pointsToShow)
             
-            if i % 5 == 0:
+            if toPlotData and i % 5 == 0:
                 qPlot.put([data.copy(), control.copy(), fit])
 
-            qServerTransfer.put([dataRecived, control.getDataAfter(lastRecivedTime), fit.getDataAfter(lastRecivedTime)])
+            if sendToServer:
+                qServerTransfer.put([dataRecived.copy(), control.getDataAfter(lastRecivedTime), fit.getDataAfter(lastRecivedTime)])
 
             lastRecivedTime = data.time[-1]
             dataRecived.clear()
@@ -104,24 +102,26 @@ pointsToShow = 100
 system.waitForInitalization()
 
 qCollectData = queue.LifoQueue()
-qCollectErrors = queue.LifoQueue()
 qPlot = queue.LifoQueue()
 qServerTransfer = queue.Queue()
 toTerminate = mp.Value(ctypes.c_bool, False)
+sendToServer = True 
+toPlotData = False
 
-collectDataProcess = threading.Thread(target=collectData, args=(qCollectData, qCollectErrors, toTerminate, ))
-processDataProcess = threading.Thread(target=processData, args=(qPlot, qCollectData, qServerTransfer, toTerminate, pointsToShow, ))
+collectDataProcess = threading.Thread(target=collectData, args=(qCollectData, toTerminate, ))
 sendToServerProcess = threading.Thread(target=system.sendDataToServer, args=(qServerTransfer, toTerminate, ))
-# plotProcess = mp.Process(target=plotData, args=(qPlot,pointsToShow, toTerminate, ))
+plotProcess = threading.Thread(target=plotData, args=(qPlot,pointsToShow, toTerminate, ))
 
-# ygfh
 collectDataProcess.start()
-processDataProcess.start()
-sendToServerProcess.start()
+
+if sendToServer:
+    sendToServerProcess.start()
+
+if toPlotData:
+    plotProcess.start()
 
 try:
-    # processData(qPlot, qCollectXT, qPCTransfer, toTerminate, pointsToShow)
-    plotData(qPlot, pointsToShow, toTerminate)
+    processData(qPlot, qCollectData, qServerTransfer, toTerminate, pointsToShow, )
 except KeyboardInterrupt:
     print("exiting")
 except Exception as ex:
@@ -129,9 +129,28 @@ except Exception as ex:
     raise ex
 finally:
     toTerminate.value = True
-    collectDataProcess.join()    
-    processDataProcess.join()
-    system.stopSendingToServer()
-    sendToServerProcess.join()
+    print("toTerminate.value = True")
+    
+    collectDataProcess.join(2)
+    print("collectDataProcess.join()")    
+    # processDataProcess.join()
+    
+    if toPlotData:
+        plotProcess.join(2)
+        print("plotProcess.join()")
+        
     system.setNewControlValue(0)
+
+    if sendToServer:
+        system.stopSendingToServer()
+        print("system.stopSendingToServer()")
+
+        sendToServerProcess.join(2)
+        print("sendToServerProcess.join(2)")
+
+        if sendToServerProcess.isAlive():
+            print("send to server process did not ended properly")
+
     system.closeConnection()
+    print("system.closeConnection()")
+    

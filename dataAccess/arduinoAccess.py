@@ -20,6 +20,7 @@ class arduinoAccess:
     def __init__(self, sps = 8, gain = 0):
         self.ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
         self.ser.reset_input_buffer()
+        self.operationVoltage = 2
         # self.addr = 0x8 # bus address
         # self.bus = SMBus(1) # indicates /dev/ic2-1
 
@@ -37,7 +38,7 @@ class arduinoAccess:
 
     def readData(self, channelNumber = 0):
         if self.ser.in_waiting == 0:
-            return
+            return None
         
         timeArray = []
         dataArray = []
@@ -57,7 +58,7 @@ class arduinoAccess:
             data = struct.unpack("<i",rawData[4:8])[0]                
 
             time = time/1E3
-            data = data/(2**31) * 2
+            data = data/(2**31) * self.operationVoltage
 
             # print(rawData[0:4].hex())
             # print("time=",time)
