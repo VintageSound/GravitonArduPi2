@@ -7,9 +7,10 @@ import threading
 class serverLogic:
     def __init__(self):
         self.qData = queue.Queue()
-        self.data = timeDataTuple()
-        self.control = timeDataTuple()
-        self.fit = timeDataTuple()
+        self.data = timeDataTuple([],[])
+        self.control = timeDataTuple([],[])
+        self.fit = timeDataTuple([],[])
+        self.dataLock = threading.Lock()
         self.toTerminate = False
         self.listeningProccess = threading.Thread(target=self.listen)
 
@@ -35,10 +36,11 @@ class serverLogic:
                 
             if len(newData.time) > 0:
                 self.data.extend(newData)
-                
-        self.data.sortByTime()
-        self.control.sortByTime()
-        self.fit.sortByTime()
+        
+        if (len(self.data.time) != 0):
+            self.data.sortByTime()
+            self.control.sortByTime()
+            self.fit.sortByTime()
 
     def listen(self):
         asyncio.run(self._listen())
@@ -49,8 +51,16 @@ class serverLogic:
 
         try:
             while not self.toTerminate:
-                data, control, fit = await listener.waitForDataFromClient()
-                self.qData.put([data, control, fit])
+                newData, newControl, newFit = await listener.waitForDataFromClient()
+                # debug
+                newData = newData.copy()
+                newControl = newControl.copy()
+                newFit = newFit.copy()
+
+                newData.checkIfTupleValid()
+                newControl.checkIfTupleValid()
+                newFit.checkIfTupleValid()
+                self.qData.put([newData, newControl, newFit])
         except Exception as ex:
             print(ex)
 

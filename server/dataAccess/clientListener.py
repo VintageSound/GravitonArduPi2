@@ -13,21 +13,14 @@ class clientListener:
     async def waitForDataFromClient(self):
         data, addr = await self.sock.recvfrom()
         jsonData = json.loads(data)
-        data = timeDataTuple(jsonData["data"]["time"], jsonData["data"]["data"])
-
-        if len(data.time) != len(data.data):
-            raise Exception("invalid data recived") 
-
-        control = timeDataTuple(jsonData["control"]["time"], jsonData["control"]["data"])
-
-        if len(control.time) != len(control.data):
-            raise Exception("invalid control data recived") 
-
-        fit = timeDataTuple(jsonData["fit"]["time"], jsonData["fit"]["data"])
+        data = timeDataTuple(jsonData["data"]["time"].copy(), jsonData["data"]["data"].copy())
+        data.checkIfTupleValid()
         
-        if len(fit.time) != len(fit.data):
-            raise Exception("invalid fit data recived") 
+        control = timeDataTuple(jsonData["control"]["time"].copy(), jsonData["control"]["data"].copy())
+        control.checkIfTupleValid()
 
+        fit = timeDataTuple(jsonData["fit"]["time"].copy(), jsonData["fit"]["data"].copy())
+        fit.checkIfTupleValid()
 
         return data, control, fit
 
