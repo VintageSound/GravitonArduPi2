@@ -45,7 +45,6 @@ def plotData(qPlot, pointsToShow, toTerminate):
 
     toTerminate.Value = True
 
-
 def processData(qPlot, qCollectData, qServerTransfer, toTerminate, pointsToShow):
     system.increaseEfficiency()
 
