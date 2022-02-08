@@ -30,7 +30,6 @@ def plotData(pointsToShow):
             raise ex
 
 try:
-    # processData(qPlot, qCollectXT, qPCTransfer, toTerminate, pointsToShow)
     plotData(100)
 except KeyboardInterrupt:
     print("exiting")

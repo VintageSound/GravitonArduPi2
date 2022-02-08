@@ -13,6 +13,7 @@ class clientListener:
     async def waitForDataFromClient(self):
         data, addr = await self.sock.recvfrom()
         jsonData = json.loads(data)
+        # print(jsonData)
         data = timeDataTuple(jsonData["data"]["time"].copy(), jsonData["data"]["data"].copy())
         data.checkIfTupleValid()
         

@@ -47,20 +47,16 @@ class plotter:
         return boundry
     
     def chagneFigureBoundriesX(self, x, lineName):
-        startIndex = 0
+        startIndex = self.getStartIndex(x)
         xEnd = x[-1]
-        
-        if len(x) > self.pointsToShow:
-            startIndex = len(x) - 1 - self.pointsToShow 
-#        elif len(x) > 3:
-#            xEnd = (x[2] - x[1]) * self.pointsToShow / 2 
-#        
+         
         xStart = x[startIndex]
         
         plt.xlim([xStart,xEnd])
     
     def chagneFigureBoundriesY(self, y, lineName):
-        startIndex = 0
+        startIndex = self.getStartIndex(y)
+        
         boundry = self.getBoundry(y, startIndex)
         
         self.lineYBoundry[lineName] = boundry
@@ -76,5 +72,11 @@ class plotter:
     def refresh(self):
         plt.pause(0.01)
         
-    
+    def getStartIndex(self, x):
+        startIndex = 0
+        if len(x) > self.pointsToShow:
+            startIndex = len(x) - 1 - self.pointsToShow
+
+        return startIndex
+
         
