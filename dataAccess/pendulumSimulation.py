@@ -3,6 +3,7 @@ import numpy as np
 import math
 from scipy.integrate import odeint
 import time
+from dataStructures.timeDataTuple import timeDataTuple
 
 class pendulumSimulation:
     def __init__(self):        
@@ -20,11 +21,20 @@ class pendulumSimulation:
         self.time = []
         self.stepTime = 0.0001
         self.control = 0
+        self.centerOffset = 0.5
     
     #This function is the second order diffential equation with forcing term
     def odePendulum(self, u,x):
-        return u[1], self.control/self.I - 2 * self.damping * self.omega * u[1] - u[0] * (self.omega ** 2) 
+        # TODO: check if center offset correct
+        return u[1], self.control/self.I - 2 * self.damping * self.omega * u[1] - (u[0] + self.centerOffset) * (self.omega ** 2) 
     
+    def waitForInitialization(self):
+        pass
+
+    def readData(self, channelNumber = 0):
+        t, x = self.getNextStep()
+        return timeDataTuple([t], [x])
+
     def getNextStep(self):
         timeArrayForStep = np.linspace(self.t, self.t + self.stepTime, 10)
         currentPosition = [self.x[-1],self.dx_dt[-1]]
@@ -42,3 +52,5 @@ class pendulumSimulation:
     def setNewControlValue(self, newControl):
         self.control = newControl
     
+    def close(self):
+        pass
