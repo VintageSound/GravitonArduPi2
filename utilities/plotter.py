@@ -31,7 +31,7 @@ class plotter:
         else:
             newLine, = self.ax.plot(x, y, lineStyle)
             self.lines[lineName] = newLine
-            plt.show()
+            plt.show(block=False)
             # line2, = ax.plot(x, a1, 'b-')
             
     
@@ -70,7 +70,7 @@ class plotter:
     
 
     def refresh(self):
-        plt.pause(0.01)
+        plt.pause(0.05)
         
     def getStartIndex(self, x):
         startIndex = 0

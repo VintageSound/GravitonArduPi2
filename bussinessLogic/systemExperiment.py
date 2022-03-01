@@ -18,7 +18,7 @@ from dataAccess.pendulumSimulation import pendulumSimulation
 import os
 
 class systemExperiment():
-    def __init__(self, dataBufferSize, sendToServer, toPlotData, isSimulation):
+    def __init__(self, isSimulation = False, dataBufferSize = 100, sendToServer = True):
         # os.system("sudo pigpiod")
         if isSimulation:
             self.dataAccess = pendulumSimulation()
@@ -34,6 +34,7 @@ class systemExperiment():
         self.Kdeferential = 0.1 * polarity
         self.Kroot = 0 * polarity
         self.Kproportional = 0.005 * polarity
+        self.Kintegral = 0.00001 * polarity
         self.fitLength = 20
         self.qCollectData = queue.LifoQueue()
         self.qPlot = queue.LifoQueue()
@@ -41,7 +42,7 @@ class systemExperiment():
         self.toTerminate = False
         self.dataBufferSize = dataBufferSize
         self.sendToServer = sendToServer
-        self.toPlotData = toPlotData
+        self.integral = 0
         
     def waitForInitalization(self):   
         self.dataAccess.waitForInitialization()
@@ -68,19 +69,24 @@ class systemExperiment():
     
     def setNewControlValue(self, value):
         self.pwmAccess.setNewControlValue(value)
+        pass 
 
     def calculateNewControlValue(self, data):
         fit, prediction, predictionDerivaive  = self._makeFit(data, self.fitLength)
+        self.integral += np.trapz(fit.data, fit.time) 
+
+
         derivativePower = -self.Kdeferential * predictionDerivaive.data[-1]
         rootPower = self.Kroot * np.sqrt(np.abs(prediction.data[-1])) * -1 * np.sign(prediction.data[-1])
-        proportionalPower = -1 * self.Kproportional * prediction.data[-1]
+        proportionalPower = -self.Kproportional * prediction.data[-1]
+        integralPower = -self.Kintegral * self.integral
 
-        power = derivativePower + rootPower + proportionalPower
+        power = derivativePower + rootPower + proportionalPower + integralPower
         controlValue = self._normalizeOutput(power)
 
         self.pwmAccess.setNewControlValue(controlValue)
 
-        print("lag: ", data.timeElapsedSinceUpdate()) 
+        # print("lag: ", data.timeElapsedSinceUpdate()) 
 
         return timeDataTuple([fit.time[-1]], [controlValue]), fit
 
@@ -170,7 +176,14 @@ class systemExperiment():
                 data.clip(self.dataBufferSize)
                 control.clip(self.dataBufferSize)
                 
-                if self.toPlotData and i % 5 == 0:
+                # switch to refresh rate
+                if self.toPlotData and i % 10 == 0:
+                    try:
+                        # empty queue before inserting new data 
+                        self.qPlot.get_nowait()
+                    except:
+                        pass
+
                     self.qPlot.put([data.copy(), control.copy(), fit])
 
                 if self.sendToServer:
@@ -187,6 +200,7 @@ class systemExperiment():
             pass    
 
     def plotData(self):
+        self.toPlotData = True
         plot = plotter(self.dataBufferSize)
         lastRecivedTime = 0
 
@@ -206,26 +220,35 @@ class systemExperiment():
 
         self.toTerminate = True
 
-    def startProcesses(self):
+    def startProcesses(self, toProcessDataThread, toPlotDataThread):
+        self.toProcessDataThread = toProcessDataThread
+        self.toPlotDataThread = toPlotDataThread
         self.waitForInitalization()
 
         self.collectDataProcess = threading.Thread(target=self.collectData)
         self.sendToServerProcess = threading.Thread(target=self.sendDataToServer)
         self.plotProcess = threading.Thread(target=self.plotData)
-
+        self.processDataProcess = threading.Thread(target=self.processData)
+        
         self.collectDataProcess.start()
 
         if self.sendToServer:
             self.sendToServerProcess.start()
 
-        if self.toPlotData:
+        if self.toPlotDataThread:
             self.plotProcess.start()
+
+        if self.toProcessDataThread:
+            self.processDataProcess.start()
 
     def terminateProcesses(self):
         self.toTerminate = True
         self.collectDataProcess.join(2)
         
-        if self.toPlotData:
+        if self.toProcessDataThread:
+            self.processDataProcess.join(2)
+
+        if self.toPlotDataThread:
             self.plotProcess.join(2)
             
         self.setNewControlValue(0)

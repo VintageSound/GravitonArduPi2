@@ -1,18 +1,17 @@
 
 from bussinessLogic.systemExperiment import systemExperiment
-from bussinessLogic.systemSimulation import systemSimulation
 
 sendToServerThread = False 
 toPlotDataThread = False
-proccesDataThread = True
+processDataThread = True
 toSimulate = True
-pointsToShow = 100
+pointsToShow = 1000
 
-system = systemExperiment(pointsToShow, proccesDataThread, sendToServer, toPlotData, toSimulate)
-system.startProcesses()
+system = systemExperiment(toSimulate, pointsToShow, sendToServerThread)
+system.startProcesses(processDataThread, toPlotDataThread)
 
 try:
-    system.processData()
+    system.plotData()
 except KeyboardInterrupt:
     print("exiting")
 except Exception as ex:

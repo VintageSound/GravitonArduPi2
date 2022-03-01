@@ -1,4 +1,3 @@
-
 import numpy as np
 import math
 from scipy.integrate import odeint
@@ -9,24 +8,27 @@ class pendulumSimulation:
     def __init__(self):        
         # pendulum parameters
         m=.2
-        r=2
-        self.I=3*m*r**2
+        r=0.5
+        self.I=2*m*r**2
 
-        self.period = 1 #The period of the pendulum
+        self.period = 200 #The period of the pendulum
         self.omega = 2 * math.pi / self.period  # The angular frequency of the pendulum
-        self.damping = 0.5 # damping dimentionless parameter
-        self.x =  [1] # [np.random.uniform(0,2)]
+        self.damping = 0.1 # damping dimentionless parameter
+        self.x =  [0.1] # [np.random.uniform(0,2)]
         self.dx_dt = [0] # [np.random.uniform(0,2)]
         self.t = 0
         self.time = []
-        self.stepTime = 0.0001
+        self.stepTime = 0.1
+        self.steps = 100
         self.control = 0
-        self.centerOffset = 0.5
+        self.centerOffset = 0.1
+        self.thermalNoiseStandartDeviation = 1E-6
     
     #This function is the second order diffential equation with forcing term
-    def odePendulum(self, u,x):
-        # TODO: check if center offset correct
-        return u[1], self.control/self.I - 2 * self.damping * self.omega * u[1] - (u[0] + self.centerOffset) * (self.omega ** 2) 
+    def odePendulum(self, u, x):
+        thermalNoise = np.random.normal(loc=0, scale=self.thermalNoiseStandartDeviation)
+        # print(thermalNoise)
+        return u[1], self.control/self.I - 2 * self.damping * self.omega * u[1] - (u[0] - self.centerOffset) * (self.omega ** 2) + thermalNoise
     
     def waitForInitialization(self):
         pass
@@ -36,7 +38,8 @@ class pendulumSimulation:
         return timeDataTuple([t], [x])
 
     def getNextStep(self):
-        timeArrayForStep = np.linspace(self.t, self.t + self.stepTime, 10)
+        timeArrayForStep = np.linspace(self.t, self.t + self.stepTime, self.steps)
+        time.sleep(self.stepTime)
         currentPosition = [self.x[-1],self.dx_dt[-1]]
         
         Us = odeint(self.odePendulum, currentPosition, timeArrayForStep)
@@ -50,7 +53,8 @@ class pendulumSimulation:
         return self.time[-1], self.x[-1]
     
     def setNewControlValue(self, newControl):
-        self.control = newControl
+        self.control = newControl * 0.01
+        pass
     
     def close(self):
         pass
