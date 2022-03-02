@@ -39,7 +39,7 @@ class pendulumSimulation:
 
     def getNextStep(self):
         timeArrayForStep = np.linspace(self.t, self.t + self.stepTime, self.steps)
-        time.sleep(self.stepTime)
+        time.sleep(0.001)
         currentPosition = [self.x[-1],self.dx_dt[-1]]
         
         Us = odeint(self.odePendulum, currentPosition, timeArrayForStep)

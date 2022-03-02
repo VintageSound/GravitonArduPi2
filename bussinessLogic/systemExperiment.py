@@ -43,7 +43,12 @@ class systemExperiment():
         self.dataBufferSize = dataBufferSize
         self.sendToServer = sendToServer
         self.integral = 0
-        
+        self.toPlotData = False
+        self.learningRateKi = 0.0001
+        self.learningRateKd = 0.01
+        self.learningRateKp = 0.01
+        self.errorIntegral = 0
+
     def waitForInitalization(self):   
         self.dataAccess.waitForInitialization()
 
@@ -75,7 +80,6 @@ class systemExperiment():
         fit, prediction, predictionDerivaive  = self._makeFit(data, self.fitLength)
         self.integral += np.trapz(fit.data, fit.time) 
 
-
         derivativePower = -self.Kdeferential * predictionDerivaive.data[-1]
         rootPower = self.Kroot * np.sqrt(np.abs(prediction.data[-1])) * -1 * np.sign(prediction.data[-1])
         proportionalPower = -self.Kproportional * prediction.data[-1]
@@ -89,6 +93,28 @@ class systemExperiment():
         # print("lag: ", data.timeElapsedSinceUpdate()) 
 
         return timeDataTuple([fit.time[-1]], [controlValue]), fit
+
+    def updatePIDbyGradientDescent(self, control, newData):
+        if len(control.data) < 2 or control.data[-1] == control.data[-2]:
+            return
+        
+        if newData.time[0] != control.time[-2]:
+            raise Exception("time not mutched")
+
+        dataControlDerivative = (newData.data[-1] - newData.data[0]) / (control.data[-1] - control.data[-2])
+        newError = [d**2 for d in newData.data]
+        e_t = newError[-1]
+        d_e_t_dt = (newError[-1] - newError[-2]) / (newData.time[-1] - newData.time[-2])
+        self.errorIntegral += np.trapz(newError, newData.time)
+
+        self.Kproportional += self.learningRateKp * e_t * dataControlDerivative
+        self.Kintegral += self.learningRateKi * e_t * dataControlDerivative * self.errorIntegral
+        self.Kdeferential += self.learningRateKd * e_t * dataControlDerivative * d_e_t_dt
+        
+        print("Kp: ", self.Kproportional, " Ki: ", self.Kintegral, " kd: ", self.Kdeferential)
+
+        if np.isnan(self.Kproportional) or np.isnan(self.Kintegral) or np.isnan(self.Kdeferential):
+            raise Exception("PID Parameter is NaN")
 
     def closeConnection(self):
         self.dataAccess.close()
@@ -124,8 +150,8 @@ class systemExperiment():
         
         norm = pidOutput * normalization
         
-        if abs(norm) > 1:
-            return np.sign(norm)
+        # if abs(norm) > 1:
+        #     return np.sign(norm)
         
         return norm
 
@@ -170,14 +196,16 @@ class systemExperiment():
                 data.extend(dataRecived)
 
                 newControl, fit = self.calculateNewControlValue(data)
-
+                newFit = fit.getDataAfter(control.time[-1])
                 control.extend(newControl)
                 
+                self.updatePIDbyGradientDescent(control,newFit)
+
                 data.clip(self.dataBufferSize)
                 control.clip(self.dataBufferSize)
                 
                 # switch to refresh rate
-                if self.toPlotData and i % 10 == 0:
+                if self.toPlotData and i % 50 == 0:
                     try:
                         # empty queue before inserting new data 
                         self.qPlot.get_nowait()
@@ -189,7 +217,7 @@ class systemExperiment():
                 if self.sendToServer:
                     self.qServerTransfer.put([dataRecived.copy(), control.getDataAfter(lastRecivedTime), fit.getDataAfter(lastRecivedTime)])
 
-                lastRecivedTime = data.time[-1]
+                self.lastRecivedTime = data.time[-1]
                 dataRecived.clear()
 
                 i = i + 1
