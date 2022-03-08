@@ -11,8 +11,8 @@ import threading
 from queue import Empty
 from numpy import sign
 from dataStructures.timeDataTuple import timeDataTuple
-# from dataAccess.pwmAccess import pwmAccess
-# from dataAccess.arduinoAccess import arduinoAccess
+from dataAccess.pwmAccess import pwmAccess
+from dataAccess.arduinoAccess import arduinoAccess
 from dataAccess.serverAccess import serverAccess
 from dataAccess.pendulumSimulation import pendulumSimulation
 import os
@@ -31,10 +31,10 @@ class systemExperiment():
         self.newControl = []
         
         polarity = 1
-        self.Kdeferential = 0.1 * polarity
+        self.Kdeferential = 0.2 * polarity
         self.Kroot = 0 * polarity
-        self.Kproportional = 0.005 * polarity
-        self.Kintegral = 0.00001 * polarity
+        self.Kproportional = 0.01 * polarity
+        self.Kintegral = 0 * polarity
         self.fitLength = 20
         self.qCollectData = queue.LifoQueue()
         self.qPlot = queue.LifoQueue()
@@ -45,9 +45,10 @@ class systemExperiment():
         self.integral = 0
         self.toPlotData = False
         self.learningRateKi = 0.0001
-        self.learningRateKd = 0.01
-        self.learningRateKp = 0.01
+        self.learningRateKd = 0.1
+        self.learningRateKp = 0.1
         self.errorIntegral = 0
+        self.toAdjustPID = False
 
     def waitForInitalization(self):   
         self.dataAccess.waitForInitialization()
@@ -150,8 +151,8 @@ class systemExperiment():
         
         norm = pidOutput * normalization
         
-        # if abs(norm) > 1:
-        #     return np.sign(norm)
+        if abs(norm) > 1:
+            return np.sign(norm)
         
         return norm
 
@@ -199,13 +200,14 @@ class systemExperiment():
                 newFit = fit.getDataAfter(control.time[-1])
                 control.extend(newControl)
                 
-                self.updatePIDbyGradientDescent(control,newFit)
+                if self.toAdjustPID:
+                    self.updatePIDbyGradientDescent(control,newFit)
 
                 data.clip(self.dataBufferSize)
                 control.clip(self.dataBufferSize)
                 
                 # switch to refresh rate
-                if self.toPlotData and i % 50 == 0:
+                if self.toPlotData and i % 5 == 0:
                     try:
                         # empty queue before inserting new data 
                         self.qPlot.get_nowait()
@@ -226,6 +228,22 @@ class systemExperiment():
             self.toTerminate = True
         finally:
             pass    
+
+    def listenToInput(self):
+        print("Listening to input")
+
+        while not self.toTerminate:
+            inputChar = input()
+
+            if inputChar == 'on':
+                self.toAdjustPID = True
+                self.errorIntegral = 0 
+                print("Adjust PID parameters on")
+            elif inputChar == 'off':
+                self.toAdjustPID = False
+                print("Adjust PID parameters off")
+            else:
+                print("command not recognized")
 
     def plotData(self):
         self.toPlotData = True
@@ -257,8 +275,10 @@ class systemExperiment():
         self.sendToServerProcess = threading.Thread(target=self.sendDataToServer)
         self.plotProcess = threading.Thread(target=self.plotData)
         self.processDataProcess = threading.Thread(target=self.processData)
+        self.listenToInputProcess = threading.Thread(target=self.listenToInput)
         
         self.collectDataProcess.start()
+        self.listenToInputProcess.start()
 
         if self.sendToServer:
             self.sendToServerProcess.start()

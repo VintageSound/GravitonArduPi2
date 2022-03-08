@@ -4,8 +4,8 @@ from bussinessLogic.systemExperiment import systemExperiment
 sendToServerThread = False 
 toPlotDataThread = False
 processDataThread = True
-toSimulate = True
-pointsToShow = 1000
+toSimulate = False
+pointsToShow = 100
 
 system = systemExperiment(toSimulate, pointsToShow, sendToServerThread)
 system.startProcesses(processDataThread, toPlotDataThread)
