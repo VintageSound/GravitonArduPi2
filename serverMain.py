@@ -13,8 +13,8 @@ def plotData(pointsToShow):
     while plot.isFigureOpen() and not server.toTerminate:
         try:
             server.proccessNewData()
-            
-            if len(server.data.time) == 0:
+
+            if len(server.data.data) < 4:
                 continue
 
             if index % 5 == 0: 

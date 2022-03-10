@@ -3,6 +3,8 @@ from server.dataAccess.clientListener import clientListener
 import asyncio
 import queue
 import threading
+import pandas as pd
+from datetime import datetime
 
 class serverLogic:
     def __init__(self):
@@ -12,15 +14,32 @@ class serverLogic:
         self.fit = timeDataTuple([],[])
         self.dataLock = threading.Lock()
         self.toTerminate = False
-        self.listeningProccess = threading.Thread(target=self.listen)
 
     def startListenToClient(self):
+        self.createNewCsvFile()
+        self.index = 0
+        self.listeningProccess = threading.Thread(target=self.listen)
         self.listeningProccess.start()
 
+    def createNewCsvFile(self):
+        self.dataFileName = "Data\\Graviton_data_" + datetime.now().strftime("%d_%m,%H_%M") + ".csv"
+        self.controlFileName = "Data\\Graviton_control_" + datetime.now().strftime("%d_%m,%H_%M") + ".csv"
+                
     def stopListenToClient(self):
         self.toTerminate = True
         asyncio.gather()
         self.listeningProccess.join()
+        self.saveData()
+
+    def saveData(self):
+        dataDict = {'time': self.data.time, 'data' : self.data.data}
+        controlDict = {'control time' : self.control.time, 'control data' : self.control.data}
+        dfData = pd.DataFrame(dataDict)
+        dfControl = pd.DataFrame(controlDict)
+        dfData.to_csv(self.dataFileName, mode='a')
+        dfControl.to_csv(self.controlFileName, mode='a')
+
+        print("Data saved")
 
     def proccessNewData(self):
         for n in range(5):
@@ -42,6 +61,12 @@ class serverLogic:
             self.control.sortByTime()
             self.fit.sortByTime()
 
+        if len(self.data.time) > 1000:
+            self.saveData()
+            self.data.clear()
+            self.control.clear()
+            self.fit.clear()
+        
     def listen(self):
         asyncio.run(self._listen())
 
