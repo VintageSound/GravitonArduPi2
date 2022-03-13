@@ -1,9 +1,9 @@
 
 from bussinessLogic.systemExperiment import systemExperiment
 
-sendToServerThread = False 
+sendToServerThread = True 
 toPlotDataThread = False
-processDataThread = True
+processDataThread = False
 toSimulate = False
 pointsToShow = 100
 
@@ -11,7 +11,8 @@ system = systemExperiment(toSimulate, pointsToShow, sendToServerThread)
 system.startProcesses(processDataThread, toPlotDataThread)
 
 try:
-    system.plotData()
+    system.processData()
+    # system.plotData()
 except KeyboardInterrupt:
     print("exiting")
 except Exception as ex:
@@ -19,3 +20,4 @@ except Exception as ex:
     raise ex
 finally:
     system.terminateProcesses()
+

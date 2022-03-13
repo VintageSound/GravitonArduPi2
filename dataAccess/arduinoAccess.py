@@ -18,8 +18,8 @@ class DecodingError(Exception):
 
 class arduinoAccess:
     def __init__(self, sps = 8, gain = 0):
-        self.ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
-        self.ser.reset_input_buffer()
+        self.ser = None
+        self.isInitialized = False
         self.operationVoltage = 2
         # self.addr = 0x8 # bus address
         # self.bus = SMBus(1) # indicates /dev/ic2-1
@@ -27,17 +27,21 @@ class arduinoAccess:
     def waitForInitialization(self):
         print("waiting for arduino to initalize...")
         
+        self.ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
+        self.ser.reset_input_buffer()
+        sleep(3)
+        
         while self.ser.in_waiting == 0:
             pass
 
-        self.ser.read_until(terminator=b'sssss')
+        self.ser.read_until(expected=b'sssss')
         self.ser.read(size=5)
-
+        
+        self.isInitialized = True
         print("arduino initailized!")
 
-
-    def readData(self, channelNumber = 0):
-        if self.ser.in_waiting == 0:
+    def readData(self):
+        if self.ser.in_waiting == 0 or not self.isInitialized:
             return None
         
         timeArray = []
@@ -49,10 +53,6 @@ class arduinoAccess:
             
             if not rawData.endswith(b'e'):
                 raise DecodingError("unexpected ending byte: " , rawData[8:])
-
-            # struct.unpack("<l",bytearray(data))
-            # time = int(timeanddata[0].decode('utf-8'))
-            # data = int(timeanddata[1].decode('utf-8'))
 
             time = struct.unpack("<I",rawData[0:4])[0]
             data = struct.unpack("<i",rawData[4:8])[0]                
@@ -72,7 +72,7 @@ class arduinoAccess:
         except DecodingError as e:
             print(e)
             print("faulty data: ", rawData)
-            self.ser.read_until(terminator=b'e')
+            self.ser.read_until(expected=b'e')
         except Exception as e:
             print(e)
             print("faulty data: ", rawData)      
@@ -85,6 +85,8 @@ class arduinoAccess:
         # return value
  
     def close(self):
+        self.isInitialized = False
+        self.ser.close()
         gc.collect()
         gc.enable()
         GPIO.cleanup()

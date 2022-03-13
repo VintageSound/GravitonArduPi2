@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import time
 from numpy.lib.ufunclike import _fix_out_named_y
 from utilities.plotter import plotter 
@@ -13,29 +14,23 @@ from numpy import sign
 from dataStructures.timeDataTuple import timeDataTuple
 from dataAccess.pwmAccess import pwmAccess
 from dataAccess.arduinoAccess import arduinoAccess
+from dataAccess.cameraAccess import cameraAccess
 from dataAccess.serverAccess import serverAccess
 from dataAccess.pendulumSimulation import pendulumSimulation
 import os
 
+KD = 0.2
+KI = 1E-9
+KP = 0.01
+
 class systemExperiment():
     def __init__(self, isSimulation = False, dataBufferSize = 100, sendToServer = True):
-        # os.system("sudo pigpiod")
-        if isSimulation:
-            self.dataAccess = pendulumSimulation()
-            self.pwmAccess = self.dataAccess
-        else:
-            self.dataAccess = arduinoAccess()
-            self.pwmAccess = pwmAccess()
+        self.polarity = 1
         
+        self.dataAccess = None 
         self.serverAccess = serverAccess()
-        self.newControl = []
         
-        polarity = 1
-        self.Kdeferential = 0.2 * polarity
-        self.Kroot = 0 * polarity
-        self.Kproportional = 0.01 * polarity
-        self.Kintegral = 0 * polarity
-        self.fitLength = 20
+        self.fitLength = 15
         self.qCollectData = queue.LifoQueue()
         self.qPlot = queue.LifoQueue()
         self.qServerTransfer = queue.Queue()
@@ -44,11 +39,55 @@ class systemExperiment():
         self.sendToServer = sendToServer
         self.integral = 0
         self.toPlotData = False
-        self.learningRateKi = 0.0001
-        self.learningRateKd = 0.1
-        self.learningRateKp = 0.1
+        self.learningRateKi = 1E-11
+        self.learningRateKd = 0.001
+        self.learningRateKp = 0.001
         self.errorIntegral = 0
         self.toAdjustPID = False
+        
+        if isSimulation:
+            self.dataAccess = pendulumSimulation()
+            self.pwmAccess = self.dataAccess
+        else:
+            self.switchToCamera()
+            # self.switchToArduino()
+            self.pwmAccess = pwmAccess()
+        
+
+    def switchToCamera(self):
+        if self.dataAccess is not None: 
+            self.dataAccess.close()
+        
+        self.dataSourceCamera = True
+        self.dataAccess = cameraAccess()
+        self.dataAccess.waitForInitialization()
+        
+        self.Kdeferential = 5 * self.polarity
+        self.Kproportional = 0 * self.polarity
+        self.Kintegral = 0 * self.polarity
+        self.refreshRate = 1
+        
+        self.data = timeDataTuple([0],[0])
+        self.control = timeDataTuple([0],[0])
+        gc.collect()
+        
+    def switchToArduino(self):
+        if self.dataAccess is not None: 
+            self.dataAccess.close()
+            time.sleep(2)
+            
+        self.dataSourceCamera = False
+        self.dataAccess = arduinoAccess()
+        self.dataAccess.waitForInitialization()
+        
+        self.Kdeferential = KD * self.polarity
+        self.Kproportional = KP * self.polarity
+        self.Kintegral = KI * self.polarity
+        self.refreshRate = 5
+        
+        self.data = timeDataTuple([0],[0])
+        self.control = timeDataTuple([0],[0])
+        gc.collect()
 
     def waitForInitalization(self):   
         self.dataAccess.waitForInitialization()
@@ -63,7 +102,7 @@ class systemExperiment():
     async def _sendDataToServer(self):
         while not self.toTerminate:
             try:
-                [data, control, fit] = queue.get(timeout = 1)
+                [data, control, fit] = self.qServerTransfer.get(timeout = 2)
                 await self.serverAccess.sendDataToServer(data, control, fit)
             except Empty as ex:
                 print("send to server queue is empty")
@@ -71,7 +110,7 @@ class systemExperiment():
                 print("Error in sending data to server: ", ex)
         
     def readData(self):
-        return self.dataAccess.readData(0) 
+        return self.dataAccess.readData() 
     
     def setNewControlValue(self, value):
         self.pwmAccess.setNewControlValue(value)
@@ -82,11 +121,11 @@ class systemExperiment():
         self.integral += np.trapz(fit.data, fit.time) 
 
         derivativePower = -self.Kdeferential * predictionDerivaive.data[-1]
-        rootPower = self.Kroot * np.sqrt(np.abs(prediction.data[-1])) * -1 * np.sign(prediction.data[-1])
+        # rootPower = self.Kroot * np.sqrt(np.abs(prediction.data[-1])) * -1 * np.sign(prediction.data[-1])
         proportionalPower = -self.Kproportional * prediction.data[-1]
         integralPower = -self.Kintegral * self.integral
 
-        power = derivativePower + rootPower + proportionalPower + integralPower
+        power = derivativePower + proportionalPower + integralPower
         controlValue = self._normalizeOutput(power)
 
         self.pwmAccess.setNewControlValue(controlValue)
@@ -112,11 +151,15 @@ class systemExperiment():
         self.Kintegral += self.learningRateKi * e_t * dataControlDerivative * self.errorIntegral
         self.Kdeferential += self.learningRateKd * e_t * dataControlDerivative * d_e_t_dt
         
+        if self.Kproportional < 0 : self.Kproportional = 0
+        if self.Kintegral < 0 : self.Kintegral = 0 
+        if self.Kdeferential < 0 : self.Kdeferential = 0  
+        
         print("Kp: ", self.Kproportional, " Ki: ", self.Kintegral, " kd: ", self.Kdeferential)
 
         if np.isnan(self.Kproportional) or np.isnan(self.Kintegral) or np.isnan(self.Kdeferential):
             raise Exception("PID Parameter is NaN")
-
+    
     def closeConnection(self):
         self.dataAccess.close()
         pass
@@ -173,8 +216,6 @@ class systemExperiment():
         #TODO: check if needed
         # self.increaseEfficiency()
 
-        data = timeDataTuple([0],[0])
-        control = timeDataTuple([0],[0])
         dataRecived = timeDataTuple([],[])
         lastRecivedTime = 0
 
@@ -194,32 +235,31 @@ class systemExperiment():
                     continue
 
                 dataRecived.sortByTime()
-                data.extend(dataRecived)
+                self.data.extend(dataRecived)
 
-                newControl, fit = self.calculateNewControlValue(data)
-                newFit = fit.getDataAfter(control.time[-1])
-                control.extend(newControl)
+                newControl, fit = self.calculateNewControlValue(self.data)
+                newFit = fit.getDataAfter(self.control.time[-1])
+                self.control.extend(newControl)
                 
                 if self.toAdjustPID:
-                    self.updatePIDbyGradientDescent(control,newFit)
+                    self.updatePIDbyGradientDescent(self.control,newFit)
 
-                data.clip(self.dataBufferSize)
-                control.clip(self.dataBufferSize)
+                self.data.clip(self.dataBufferSize)
+                self.control.clip(self.dataBufferSize)
                 
-                # switch to refresh rate
-                if self.toPlotData and i % 5 == 0:
+                if self.toPlotData and i % self.refreshRate == 0:
                     try:
                         # empty queue before inserting new data 
                         self.qPlot.get_nowait()
                     except:
                         pass
 
-                    self.qPlot.put([data.copy(), control.copy(), fit])
+                    self.qPlot.put([self.data.copy(), self.control.copy(), fit])
 
                 if self.sendToServer:
-                    self.qServerTransfer.put([dataRecived.copy(), control.getDataAfter(lastRecivedTime), fit.getDataAfter(lastRecivedTime)])
+                    self.qServerTransfer.put([dataRecived.copy(), self.control.getDataAfter(lastRecivedTime), fit.getDataAfter(lastRecivedTime)])
 
-                self.lastRecivedTime = data.time[-1]
+                self.lastRecivedTime = self.data.time[-1]
                 dataRecived.clear()
 
                 i = i + 1
@@ -233,17 +273,30 @@ class systemExperiment():
         print("Listening to input")
 
         while not self.toTerminate:
-            inputChar = input()
+            try:
+                inputChar = input()
 
-            if inputChar == 'on':
-                self.toAdjustPID = True
-                self.errorIntegral = 0 
-                print("Adjust PID parameters on")
-            elif inputChar == 'off':
-                self.toAdjustPID = False
-                print("Adjust PID parameters off")
-            else:
-                print("command not recognized")
+                if inputChar == 'l' :
+                    if not self.toAdjustPID:
+                        self.toAdjustPID = True
+                        self.errorIntegral = 0 
+                        print("Adjust PID parameters on")
+                    else:
+                        self.toAdjustPID = False
+                        print("Adjust PID parameters off")
+                elif inputChar == 'c':
+                    if not self.dataSourceCamera:
+                        self.switchToCamera()
+                    else:
+                        self.switchToArduino()
+                elif inputChar == 'e':
+                    self.toTerminate = True
+                else:
+                    print("command not recognized")
+            except Exception as ex:
+                print(ex)
+                self.toTerminate = True
+                
 
     def plotData(self):
         self.toPlotData = True
@@ -269,7 +322,6 @@ class systemExperiment():
     def startProcesses(self, toProcessDataThread, toPlotDataThread):
         self.toProcessDataThread = toProcessDataThread
         self.toPlotDataThread = toPlotDataThread
-        self.waitForInitalization()
 
         self.collectDataProcess = threading.Thread(target=self.collectData)
         self.sendToServerProcess = threading.Thread(target=self.sendDataToServer)
@@ -304,7 +356,9 @@ class systemExperiment():
         if self.sendToServer:
             self.sendToServerProcess.join(2)
             
-            if self.sendToServerProcess.isAlive():
+            if self.sendToServerProcess.is_alive():
                 print("send to server process did not ended properly")
 
         self.closeConnection()
+        
+        self.listenToInputProcess.join(2)

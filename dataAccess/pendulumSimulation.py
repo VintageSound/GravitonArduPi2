@@ -33,7 +33,7 @@ class pendulumSimulation:
     def waitForInitialization(self):
         pass
 
-    def readData(self, channelNumber = 0):
+    def readData(self):
         t, x = self.getNextStep()
         return timeDataTuple([t], [x])
 

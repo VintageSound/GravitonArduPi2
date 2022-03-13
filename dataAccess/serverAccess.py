@@ -6,7 +6,7 @@ from dataStructures.timeDataTuple import timeDataTuple
 
 class serverAccess:
     def __init__(self):
-        self.ip = '169.254.200.205'
+        self.ip = '169.254.174.248'
         self.port = 9999
 
     def convertDatatoJsonString(self, data, control, fit):
@@ -31,6 +31,8 @@ class serverAccess:
             sock = await asyncudp.create_socket(remote_addr=(self.ip, self.port))
             sock.sendto(dataBytes)
             # print(await sock.recvfrom())
+            
+            # print("Data sent to server: ", jsonData)
         except Exception as ex:
             print(ex)
         finally:
